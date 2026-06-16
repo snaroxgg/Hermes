@@ -1,0 +1,7 @@
+name: replicate
+version: 1.0.0
+description: "Replicate video generation backend (Veo 3.1, Kling v2.5 Turbo Pro, Seedance 1 Pro, Hailuo 2.3) — text-to-video & image-to-video."
+author: NousResearch
+kind: backend
+requires_env:
+  - REPLICATE_API_TOKEN
