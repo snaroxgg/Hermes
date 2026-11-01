@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Hermes Gallery</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Hermes Agent как ночная галерея: открытый ИИ-агент, который помнит вас, сам пишет навыки и работает в терминале и мессенджерах.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Forum&family=Golos+Text:wght@400;500;600&family=PT+Mono&display=swap">
+<style>
+/* Layout: a night museum. Fixed glass "memory crystal" in a WebGL layer behind the halls;
+   halls = vestibule (asymmetric hero + museum label), Hall I pinned horizontal gallery of four works,
+   catalogue labels, a wall of names, six framed exhibits, and a visitor placard with console. */
+:root {
+  --night: #040918;
+  --navy: #0a1532;
+  --plate: rgba(9, 18, 42, 0.62);
+  --silver: #dfe5ef;
+  --muted: #8a94ab;
+  --dim: #55607a;
+  --rule: rgba(190, 205, 235, 0.09);
+  --rule-2: rgba(190, 205, 235, 0.2);
+  --brass: #c2a36f;
+  --glow: #5b8eff;
+
+  --display: "Forum", "Prata", "Trajan Pro", Georgia, serif;
+  --body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "PT Mono", ui-monospace, Menlo, monospace;
+
+  --wrap: 1280px;
+  --ease: cubic-bezier(.16, .8, .14, 1);
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--night); }
+body {
+  margin: 0; color: var(--silver); font-family: var(--body); font-size: 1rem; line-height: 1.62;
+  background:
+    radial-gradient(1000px 700px at 78% 8%, rgba(46, 86, 180, .26), transparent 62%),
+    radial-gradient(800px 600px at 10% 70%, rgba(24, 48, 110, .2), transparent 60%),
+    var(--night);
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 1px solid var(--brass); outline-offset: 4px; }
+h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; text-wrap: balance; }
+p { margin: 0; }
+.wrap { position: relative; max-width: var(--wrap); margin-inline: auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.lbl { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.lbl.brass { color: var(--brass); }
+.caps { font-family: var(--display); text-transform: uppercase; letter-spacing: 0.18em; }
+
+/* ---------- intro: the doors ---------- */
+#doors { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+#doors i { position: absolute; top: 0; bottom: 0; width: 50.5%; background: var(--night); animation: door 1.3s var(--ease) 1.25s forwards; }
+#doors i:first-child { left: 0; transform-origin: left; }
+#doors i:last-child { right: 0; animation-name: door2; }
+#doors b {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; translate: -50% 0; transform: scaleY(0);
+  background: linear-gradient(transparent, #fff 30%, #fff 70%, transparent);
+  box-shadow: 0 0 22px 3px rgba(91, 142, 255, .85), 0 0 80px 10px rgba(91, 142, 255, .35);
+  animation: slit 1s var(--ease) .15s forwards, fade .6s ease 1.9s forwards;
+}
+#doors span { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 1; font-family: var(--display); font-size: 0.875rem; letter-spacing: .6em; padding-left: .6em; color: var(--silver); opacity: 0; animation: appear .6s ease .6s forwards, fade .4s ease 1.2s forwards; white-space: nowrap; background: var(--night); padding-block: 8px; }
+@keyframes slit { to { transform: scaleY(1); } }
+@keyframes door { to { transform: translateX(-100%); } }
+@keyframes door2 { to { transform: translateX(100%); } }
+@keyframes appear { to { opacity: 1; } }
+@keyframes fade { to { opacity: 0; } }
+
+/* ---------- stage + rules ---------- */
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; opacity: 0; }
+.rules { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.rules .wrap { height: 100%; display: grid; grid-template-columns: repeat(6, 1fr); }
+.rules i { border-left: 1px solid var(--rule); }
+.rules i:last-child { border-right: 1px solid var(--rule); }
+.fallback-gem { display: none; }
+.no-webgl .fallback-gem { display: block; position: absolute; right: 10%; top: 22%; width: 260px; height: 340px; clip-path: polygon(50% 0, 100% 30%, 82% 100%, 18% 100%, 0 30%); background: linear-gradient(160deg, rgba(220, 232, 255, .5), rgba(60, 100, 200, .2)); box-shadow: 0 0 120px rgba(91, 142, 255, .5); }
+
+/* ---------- header + rail ---------- */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 40; background: var(--night); }
+.top { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 30; border-bottom: 1px solid transparent; transition: background .5s, border-color .5s; }
+.top.solid { background: rgba(4, 9, 24, .78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: var(--rule); }
+.top .wrap { height: 76px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; }
+.mark { display: flex; align-items: baseline; gap: 14px; }
+.mark b { font-family: var(--display); font-weight: 400; font-size: 1.25rem; letter-spacing: .34em; }
+.mark span { font-family: var(--mono); font-size: .625rem; letter-spacing: .16em; color: var(--brass); text-transform: uppercase; }
+.halls { display: flex; gap: 30px; }
+.halls a { font-family: var(--mono); font-size: .6875rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); transition: color .3s; }
+.halls a:hover, .halls a.on { color: var(--silver); }
+.halls a.on::before { content: "· "; color: var(--brass); }
+.top-r { justify-self: end; display: flex; align-items: center; gap: 22px; }
+.btn { display: inline-flex; align-items: center; gap: 12px; font: 500 .875rem var(--body); padding: 13px 22px; border: 1px solid var(--rule-2); color: var(--silver); background: rgba(8, 16, 38, .4); transition: border-color .4s, background .4s; white-space: nowrap; }
+.btn:hover { border-color: var(--brass); }
+.btn.solid { background: var(--silver); color: #07112a; border-color: var(--silver); }
+.btn.solid:hover { background: #fff; }
+.btn i { font-style: normal; transition: transform .4s var(--ease); }
+.btn:hover i { transform: translateX(4px); }
+.top .btn { padding: 9px 16px; font-size: .8125rem; }
+@media (max-width: 960px) { .halls, .top-r .lbl { display: none; } .top .wrap { grid-template-columns: 1fr auto; } }
+
+.rail { position: fixed; right: max(20px, env(safe-area-inset-right, 0px)); top: 50%; translate: 0 -50%; z-index: 30; display: grid; gap: 16px; justify-items: end; }
+.rail a { font-family: var(--display); font-size: .8125rem; letter-spacing: .12em; color: var(--dim); display: flex; align-items: center; gap: 10px; transition: color .4s; }
+.rail a::after { content: ""; width: 8px; height: 1px; background: currentColor; transition: width .5s var(--ease); }
+.rail a.on { color: var(--silver); }
+.rail a.on::after { width: 28px; background: var(--brass); }
+@media (max-width: 1380px) { .rail { display: none; } }
+
+/* ---------- reveals ---------- */
+.js .rv { opacity: 0; transform: translateY(40px); transition: opacity 1.4s var(--ease), transform 1.4s var(--ease); transition-delay: var(--d, 0s); }
+.js .rv.in { opacity: 1; transform: none; }
+.js .unveil { clip-path: inset(0 0 100% 0); transition: clip-path 1.6s var(--ease); transition-delay: var(--d, 0s); }
+.js .unveil.in { clip-path: inset(0 0 0 0); }
+.hero-in { animation: heroIn 1.6s var(--ease) both; animation-delay: calc(1.7s + var(--d, 0s)); }
+@keyframes heroIn { from { opacity: 0; transform: translateY(30px); letter-spacing: .3em; } }
+.hero-in2 { animation: heroIn2 1.4s var(--ease) both; animation-delay: calc(1.8s + var(--d, 0s)); }
+@keyframes heroIn2 { from { opacity: 0; transform: translateY(24px); } }
+
+/* ---------- vestibule (hero) ---------- */
+.hero { position: relative; z-index: 2; min-height: clamp(680px, 100svh, 980px); display: flex; }
+.hero .wrap { flex: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: 1fr auto; padding-block: 128px 48px; column-gap: 0; }
+.hero-text { grid-column: 1 / span 4; align-self: center; padding-right: 24px; }
+.hero h1 { font-size: clamp(3.2rem, 8.2vw, 8.4rem); line-height: .92; text-transform: uppercase; letter-spacing: .04em; }
+.hero h1 .thin { color: transparent; -webkit-text-stroke: 1px rgba(223, 229, 239, .75); }
+.hero .lede { margin-top: 30px; max-width: 31em; color: var(--muted); font-size: 1.0625rem; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 34px; }
+.museum-label { grid-column: 5 / span 2; grid-row: 2; justify-self: end; width: min(300px, 100%); border-top: 1px solid var(--brass); padding-top: 14px; display: grid; gap: 4px; font-size: .8125rem; color: var(--muted); }
+.museum-label b { font-family: var(--display); font-weight: 400; font-size: 1.375rem; color: var(--silver); letter-spacing: .04em; }
+.museum-label .lbl { margin-top: 8px; }
+.hero-foot { grid-column: 1 / span 3; grid-row: 2; align-self: end; display: flex; gap: 36px; }
+.hero-foot div { display: grid; gap: 2px; }
+.hero-foot b { font-family: var(--display); font-weight: 400; font-size: 2rem; line-height: 1; }
+@media (max-width: 960px) {
+  .hero .wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; padding-block: 108px 36px; row-gap: 40px; }
+  .hero-text { grid-column: 1; padding-right: 0; padding-top: 34vh; }
+  .museum-label { grid-column: 1; grid-row: auto; justify-self: start; }
+  .hero-foot { grid-column: 1; grid-row: auto; }
+}
+
+/* ---------- Hall I: horizontal gallery ---------- */
+.gallery { position: relative; z-index: 2; height: 400vh; }
+.g-pin { position: sticky; top: 0; height: 100svh; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+.g-head { position: absolute; top: 104px; left: 0; right: 0; }
+.g-head .wrap { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.g-track { display: flex; gap: clamp(20px, 3vw, 48px); padding-left: max(20px, calc((100vw - var(--wrap)) / 2 + 20px)); padding-right: 12vw; will-change: transform; align-items: center; margin-top: 40px; }
+.g-intro { flex: none; width: min(420px, 78vw); }
+.g-intro h2 { font-size: clamp(2.6rem, 5vw, 4.6rem); line-height: .98; text-transform: uppercase; letter-spacing: .05em; }
+.g-intro p { margin-top: 22px; color: var(--muted); max-width: 26em; }
+.g-intro .hint { margin-top: 28px; display: flex; align-items: center; gap: 12px; }
+.g-intro .hint i { width: 56px; height: 1px; background: var(--brass); position: relative; overflow: hidden; }
+.g-intro .hint i::after { content: ""; position: absolute; inset: 0; background: #fff; animation: hint 2s ease-in-out infinite; transform: translateX(-100%); }
+@keyframes hint { to { transform: translateX(100%); } }
+.work { flex: none; width: min(460px, 80vw); }
+.frame { position: relative; aspect-ratio: 4 / 5; max-width: 100%; max-height: 58svh; padding: 14px; border: 1px solid var(--rule-2); background: rgba(6, 13, 32, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.frame::before { content: ""; position: absolute; inset: 0; background: radial-gradient(70% 45% at 50% 0%, rgba(160, 190, 255, .14), transparent); pointer-events: none; }
+.canvas-in { height: 100%; border: 1px solid var(--rule); display: grid; grid-template-rows: auto 1fr auto; padding: 22px 22px 20px; position: relative; overflow: hidden; }
+.roman { font-family: var(--display); font-size: clamp(4.5rem, 8vw, 7rem); line-height: .8; color: transparent; -webkit-text-stroke: 1px rgba(223, 229, 239, .55); }
+.art { align-self: end; font: .75rem/1.85 var(--mono); color: #b9c4da; white-space: pre; overflow: hidden; }
+.art .d { color: var(--dim); } .art .h { color: var(--silver); } .art .b { color: var(--brass); }
+.frame h3 { font-size: 1.75rem; letter-spacing: .03em; margin-top: 14px; }
+.plaque { margin-top: 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; font-size: .875rem; }
+.plaque .lbl { grid-column: 1 / -1; }
+.plaque p { grid-column: 1 / -1; color: var(--muted); }
+.plaque code { grid-column: 1 / -1; font: .6875rem var(--mono); color: var(--brass); letter-spacing: .04em; }
+.g-progress { position: absolute; left: 0; right: 0; bottom: 40px; }
+.g-progress .wrap { display: flex; align-items: center; gap: 18px; }
+.g-progress span { flex: 1; height: 1px; background: var(--rule-2); position: relative; }
+.g-progress span i { position: absolute; inset: 0; background: var(--silver); transform-origin: left; transform: scaleX(var(--p, 0)); }
+@media (max-width: 700px) { .frame { max-height: 52svh; } .frame h3 { font-size: 1.4rem; } .g-head { top: 92px; } }
+
+/* ---------- Hall II: catalogue ---------- */
+.block { position: relative; z-index: 2; }
+.hall-head { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: end; gap: 0 0; margin-bottom: 56px; }
+.hall-head .no { grid-column: 1; }
+.hall-head h2 { grid-column: 2 / span 4; font-size: clamp(2.4rem, 5vw, 4.4rem); line-height: 1; text-transform: uppercase; letter-spacing: .05em; }
+.hall-head p { grid-column: 2 / span 3; margin-top: 18px; color: var(--muted); max-width: 32em; }
+@media (max-width: 960px) { .hall-head { grid-template-columns: minmax(0, 1fr); } .hall-head > * { grid-column: 1 !important; } .hall-head h2 { margin-top: 14px; } }
+.catalogue .wrap { padding-block: 150px 40px; }
+.cat { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule-2); }
+.cat article { padding: 26px 24px 30px 0; border-right: 1px solid var(--rule); min-width: 0; }
+.cat article + article { padding-left: 24px; }
+.cat article:last-child { border-right: 0; }
+.cat b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(3.4rem, 6vw, 5.4rem); line-height: 1; margin-top: 18px; font-variant-numeric: lining-nums tabular-nums; }
+.cat h3 { font-family: var(--body); font-weight: 500; font-size: 1rem; margin-top: 14px; }
+.cat p { color: var(--muted); font-size: .875rem; margin-top: 6px; }
+.cat code { display: block; margin-top: 16px; font: .6875rem var(--mono); color: var(--brass); letter-spacing: .04em; }
+@media (max-width: 960px) { .cat { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cat article { padding: 24px 16px 26px 0 !important; border-right: 0; border-bottom: 1px solid var(--rule); } .cat article:nth-child(even) { padding-left: 16px !important; border-left: 1px solid var(--rule); } }
+
+/* ---------- Hall III: wall of names ---------- */
+.wall .wrap { padding-block: 150px 40px; }
+.names { columns: 4 200px; column-gap: 0; border-top: 1px solid var(--rule-2); border-bottom: 1px solid var(--rule-2); padding-block: 26px; column-rule: 1px solid var(--rule); }
+.names span { display: block; break-inside: avoid; text-align: center; font-family: var(--display); text-transform: uppercase; letter-spacing: .2em; font-size: clamp(1rem, 1.5vw, 1.25rem); padding-block: 9px; color: #c9d2e3; transition: color .4s, text-shadow .4s; }
+.names span:hover { color: #fff; text-shadow: 0 0 18px rgba(91, 142, 255, .8); }
+.names span small { display: block; font-family: var(--mono); font-size: .5625rem; letter-spacing: .14em; color: var(--dim); margin-top: 2px; }
+.donors { margin-top: 44px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 32px; align-items: start; }
+.donors p.lbl { padding-top: 4px; }
+.donor-list { font-family: var(--display); font-size: clamp(1.25rem, 2vw, 1.6rem); line-height: 1.7; color: var(--muted); }
+.donor-list em { font-style: normal; color: var(--silver); }
+.donor-list i { font-style: normal; color: var(--brass); padding-inline: .1em; }
+@media (max-width: 760px) { .donors { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+
+/* ---------- Hall IV: exhibits ---------- */
+.exhibits .wrap { padding-block: 150px 40px; }
+.ex-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 56px 28px; align-items: start; }
+.ex { min-width: 0; }
+.ex-1 { grid-column: 1 / span 7; }
+.ex-2 { grid-column: 9 / span 4; margin-top: 120px; }
+.ex-3 { grid-column: 2 / span 4; }
+.ex-4 { grid-column: 7 / span 5; margin-top: 60px; }
+.ex-5 { grid-column: 1 / span 5; margin-top: 20px; }
+.ex-6 { grid-column: 7 / span 6; margin-top: -40px; }
+@media (max-width: 960px) { .ex-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; } .ex { grid-column: 1 !important; margin-top: 0 !important; } }
+.ex-frame { position: relative; padding: 12px; border: 1px solid var(--rule-2); background: rgba(6, 13, 32, .6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); overflow: hidden; }
+.ex-frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(60% 70% at 50% -10%, rgba(200, 220, 255, .18), transparent 70%); opacity: .35; transition: opacity .8s var(--ease); }
+.ex:hover .ex-frame::after { opacity: 1; }
+.ex-in { border: 1px solid var(--rule); padding: 28px 26px; min-height: 220px; display: grid; align-content: space-between; gap: 24px; }
+.ex-in .roman { font-size: clamp(3.6rem, 6vw, 5.4rem); }
+.ex-in pre, .ex-in .rows { margin: 0; font: .75rem/1.9 var(--mono); color: #b9c4da; white-space: pre; overflow-x: auto; }
+.ex-in .d { color: var(--dim); } .ex-in .ok { color: #9ed9b6; } .ex-in .b { color: var(--brass); }
+.ex-cap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.ex-cap h3 { grid-column: 1 / -1; font-size: 1.6rem; letter-spacing: .03em; }
+.ex-cap p { grid-column: 1 / -1; color: var(--muted); font-size: .9375rem; max-width: 36em; }
+.ex-cap .lbl:first-child { grid-column: 1 / -1; }
+.ex-cap code { grid-column: 1 / -1; font: .6875rem var(--mono); color: var(--brass); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips span { font: .75rem var(--mono); padding: 6px 11px; border: 1px solid var(--rule-2); color: #c3cde0; }
+
+/* ---------- visitor placard ---------- */
+.visit .wrap { padding-block: 150px 130px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: start; }
+@media (max-width: 960px) { .visit .wrap { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-block: 110px 100px; } }
+.placard { border: 1px solid var(--rule-2); padding: 34px 30px; background: rgba(6, 13, 32, .6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); position: relative; }
+.placard::before { content: ""; position: absolute; left: 30px; right: 30px; top: -1px; height: 1px; background: var(--brass); }
+.placard h2 { font-size: clamp(2.2rem, 3.6vw, 3.2rem); text-transform: uppercase; letter-spacing: .06em; line-height: 1; margin-top: 16px; }
+.placard ol { list-style: none; margin: 28px 0 0; padding: 0; display: grid; }
+.placard li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; padding: 16px 0; border-top: 1px solid var(--rule); }
+.placard li > span { font-family: var(--display); font-size: 1.25rem; color: var(--brass); }
+.placard li b { font-weight: 500; display: block; }
+.placard li p { color: var(--muted); font-size: .9375rem; }
+.placard code, .visit-note code { font-family: var(--mono); font-size: .8125rem; color: var(--silver); border-bottom: 1px dotted var(--brass); }
+.console { border: 1px solid var(--rule-2); background: rgba(3, 7, 18, .86); box-shadow: 0 50px 120px -50px rgba(60, 110, 230, .7); min-width: 0; }
+.c-bar { display: flex; align-items: center; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.tab { font: .6875rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid transparent; padding: 6px 12px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--silver); border-color: var(--rule-2); }
+.copy { margin-left: auto; font: 500 .75rem var(--body); background: var(--silver); color: #07112a; border: 0; padding: 8px 14px; cursor: pointer; }
+.console pre { margin: 0; padding: 22px 22px 26px; font: .8125rem/1.95 var(--mono); color: #c3cde0; overflow-x: auto; white-space: pre; }
+.console .p { color: var(--brass); user-select: none; }
+.console .d { color: var(--dim); } .console .ok { color: #9ed9b6; }
+.visit-note { margin-top: 18px; color: var(--muted); font-size: .875rem; }
+.cursor { display: inline-block; width: .55em; height: 1.05em; vertical-align: -.18em; background: var(--silver); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- footer ---------- */
+footer { position: relative; z-index: 2; border-top: 1px solid var(--rule); }
+footer .wrap { padding-block: 40px 44px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: end; }
+.f-mark { font-family: var(--display); font-size: clamp(2.4rem, 6vw, 4.6rem); letter-spacing: .3em; line-height: 1; color: transparent; -webkit-text-stroke: 1px rgba(223, 229, 239, .35); }
+.f-note { color: var(--muted); font-size: .8125rem; margin-top: 16px; max-width: 46em; }
+.f-links { display: flex; gap: 24px; font-size: .875rem; }
+.f-links a { border-bottom: 1px solid var(--rule-2); padding-bottom: 2px; }
+.f-links a:hover { border-color: var(--brass); }
+@media (max-width: 760px) { footer .wrap { grid-template-columns: minmax(0, 1fr); } }
+
+@media (prefers-reduced-motion: reduce) {
+  #doors { display: none; }
+  .hero-in, .hero-in2 { animation: none; }
+  .js .rv, .js .unveil { opacity: 1; transform: none; clip-path: none; transition: none; }
+  .g-intro .hint i::after, .cursor { animation: none; }
+}
+</style>
+
+<div id="doors" aria-hidden="true"><i></i><i></i><b></b><span>HERMES</span></div>
+<canvas id="stage" aria-hidden="true"></canvas>
+<div class="rules" aria-hidden="true"><div class="wrap"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="mark" href="#vestibule"><b>HERMES</b><span>Галерея агента</span></a>
+    <nav class="halls" aria-label="Залы">
+      <a href="#hall-1" data-sec="hall-1">Цикл</a>
+      <a href="#hall-2" data-sec="hall-2">Каталог</a>
+      <a href="#hall-3" data-sec="hall-3">Платформы</a>
+      <a href="#hall-4" data-sec="hall-4">Экспонаты</a>
+      <a href="#visit" data-sec="visit">Установка</a>
+    </nav>
+    <div class="top-r">
+      <span class="lbl">Вход свободный · MIT</span>
+      <a class="btn" href="https://github.com/NousResearch/hermes-agent">GitHub <i>↗</i></a>
+    </div>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Залы галереи">
+  <a href="#vestibule" data-sec="vestibule">Вестибюль</a>
+  <a href="#hall-1" data-sec="hall-1">I</a>
+  <a href="#hall-2" data-sec="hall-2">II</a>
+  <a href="#hall-3" data-sec="hall-3">III</a>
+  <a href="#hall-4" data-sec="hall-4">IV</a>
+  <a href="#visit" data-sec="visit">Выход</a>
+</nav>
+
+<main>
+  <section class="hero" id="vestibule" data-sec="vestibule">
+    <div class="wrap">
+      <span class="fallback-gem" aria-hidden="true"></span>
+      <div class="hero-text">
+        <p class="lbl brass hero-in2">Постоянная экспозиция · открытый ИИ-агент</p>
+        <h1 class="hero-in" style="--d:.05s; margin-top:22px">Искусство<br><span class="thin">помнить</span></h1>
+        <p class="lede hero-in2" style="--d:.25s">Hermes Agent учится на каждой задаче: запоминает вас, сам пишет навыки и находит прошлые решения. Он работает в терминале, в мессенджерах и на сервере за $5 в месяц.</p>
+        <div class="cta hero-in2" style="--d:.35s">
+          <a class="btn solid" href="#visit">Установить <i>→</i></a>
+          <a class="btn" href="#hall-1">Осмотреть залы</a>
+        </div>
+      </div>
+      <div class="hero-foot hero-in2" style="--d:.5s">
+        <div><b>25+</b><span class="lbl">платформ</span></div>
+        <div><b>30+</b><span class="lbl">провайдеров</span></div>
+        <div><b>170</b><span class="lbl">навыков</span></div>
+      </div>
+      <div class="museum-label hero-in2" style="--d:.6s">
+        <b>Hermes Agent</b>
+        <span>Самообучающийся ИИ-агент с открытым кодом</span>
+        <span>Python, TypeScript, SQLite FTS5</span>
+        <span class="lbl brass">Инв. № v0.16.0 · лицензия MIT</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="gallery" id="hall-1" data-sec="hall-1" aria-label="Зал I. Цикл обучения">
+    <div class="g-pin">
+      <div class="g-head"><div class="wrap"><p class="lbl brass">Зал I</p><p class="lbl"><span id="g-now">I</span> / IV</p></div></div>
+      <div class="g-track" id="g-track">
+        <div class="g-intro">
+          <h2>Цикл<br>обучения</h2>
+          <p>Четыре работы о том, как агент становится лучше с каждой задачей. Следующая задача начинается с того, что он уже знает.</p>
+          <p class="lbl hint"><i></i> Листайте вниз, зал движется вбок</p>
+        </div>
+        <article class="work">
+          <div class="frame"><div class="canvas-in">
+            <div class="roman">I</div>
+<div class="art"><span class="h">❯</span> почини ночной деплой
+<span class="d">┊</span> 💻 $   <span class="d">fly logs --since 8h</span>
+<span class="d">┊</span> 📖 read <span class="d">0042_orders.sql</span>
+<span class="d">┊</span> 🔧 patch <span class="d">+3 −1</span>
+<span class="d">┊</span> 💻 $   <span class="d">pytest</span> <span class="b">48 passed</span></div>
+            <h3>Решает задачу</h3>
+          </div></div>
+          <div class="plaque">
+            <span class="lbl">Работа I · терминал, браузер, файлы</span>
+            <p>Работает в настоящем терминале и браузере, читает и правит файлы, раздаёт части работы субагентам.</p>
+            <code>terminal · browser · delegate_task</code>
+          </div>
+        </article>
+        <article class="work">
+          <div class="frame"><div class="canvas-in">
+            <div class="roman">II</div>
+<div class="art"><span class="d">~/.hermes/skills/</span>
+<span class="d">└─</span> devops/
+   <span class="d">└─</span> <span class="h">fly-migration-triage/</span>
+      <span class="d">├─</span> SKILL.md
+      <span class="d">└─</span> scripts/check.py
+<span class="b">+ навык создан после задачи</span></div>
+            <h3>Пишет навык</h3>
+          </div></div>
+          <div class="plaque">
+            <span class="lbl">Работа II · процедурная память</span>
+            <p>После сложной задачи оформляет удачный подход в навык и дорабатывает его при следующих запусках.</p>
+            <code>skill_manage · agentskills.io</code>
+          </div>
+        </article>
+        <article class="work">
+          <div class="frame"><div class="canvas-in">
+            <div class="roman">III</div>
+<div class="art"><span class="d"># USER.md</span>
+<span class="h">предпочитает</span> короткие ответы
+<span class="h">стек</span> Python, Postgres, fly.io
+<span class="h">деплой</span> только после тестов
+<span class="d"># MEMORY.md</span>
+shop: миграции с DEFAULT</div>
+            <h3>Запоминает вас</h3>
+          </div></div>
+          <div class="plaque">
+            <span class="lbl">Работа III · память и модель пользователя</span>
+            <p>Ведёт память о проектах и привычках и строит модель пользователя, которая уточняется от сессии к сессии.</p>
+            <code>MEMORY.md · USER.md</code>
+          </div>
+        </article>
+        <article class="work">
+          <div class="frame"><div class="canvas-in">
+            <div class="roman">IV</div>
+<div class="art"><span class="h">❯</span> как мы чинили деплой в марте?
+<span class="d">┊</span> 🔎 session_search <span class="d">«деплой»</span>
+<span class="d">  3 сессии · 14 марта, 2 апр …</span>
+<span class="b">выжимка:</span> откат миграции,
+затем DEFAULT и бэкфилл</div>
+            <h3>Находит прошлое</h3>
+          </div></div>
+          <div class="plaque">
+            <span class="lbl">Работа IV · поиск по сессиям</span>
+            <p>Ищет по всем прошлым разговорам и отвечает выжимкой, чтобы не решать одну задачу дважды.</p>
+            <code>SQLite FTS5 · session_search</code>
+          </div>
+        </article>
+      </div>
+      <div class="g-progress" aria-hidden="true"><div class="wrap"><span class="lbl">I</span><span><i id="g-bar"></i></span><span class="lbl">IV</span></div></div>
+    </div>
+  </section>
+
+  <section class="block catalogue" id="hall-2" data-sec="hall-2">
+    <div class="wrap">
+      <div class="hall-head rv">
+        <p class="lbl brass no">Зал II</p>
+        <h2>Каталог</h2>
+        <p>Цифры посчитаны по исходному коду репозитория, а не по рекламным материалам.</p>
+      </div>
+      <div class="cat">
+        <article class="rv" style="--d:.05s"><span class="lbl">Кат. 01</span><b>25+</b><h3>Платформ и каналов</h3><p>Telegram, Discord, Slack, WhatsApp, Signal и другие.</p><code>gateway/platforms · plugins/platforms</code></article>
+        <article class="rv" style="--d:.15s"><span class="lbl">Кат. 02</span><b>30+</b><h3>Провайдеров моделей</h3><p>Смена модели одной командой /model.</p><code>plugins/model-providers</code></article>
+        <article class="rv" style="--d:.25s"><span class="lbl">Кат. 03</span><b>170</b><h3>Готовых навыков</h3><p>73 встроенных и 97 дополнительных.</p><code>skills · optional-skills</code></article>
+        <article class="rv" style="--d:.35s"><span class="lbl">Кат. 04</span><b>6</b><h3>Сред выполнения</h3><p>Local, Docker, SSH, Singularity, Modal, Daytona.</p><code>tools/environments</code></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block wall" id="hall-3" data-sec="hall-3">
+    <div class="wrap">
+      <div class="hall-head rv">
+        <p class="lbl brass no">Зал III</p>
+        <h2>Где он доступен</h2>
+        <p>Один процесс шлюза держит все каналы сразу. Пишите агенту оттуда, где вам удобно, пока он работает на удалённой машине.</p>
+      </div>
+      <div class="names unveil">
+        <span>Telegram<small>бот</small></span><span>Discord<small>сервер и ЛС</small></span><span>Slack<small>/hermes</small></span><span>WhatsApp<small>в т.ч. Cloud API</small></span><span>Signal<small>ЛС</small></span><span>Matrix<small>комнаты</small></span><span>Microsoft Teams<small>чаты</small></span><span>iMessage<small>через BlueBubbles</small></span><span>Mattermost<small>каналы</small></span><span>Google Chat<small>пространства</small></span><span>Email<small>IMAP / SMTP</small></span><span>SMS<small>шлюз</small></span><span>LINE<small>бот</small></span><span>IRC<small>каналы</small></span><span>SimpleX<small>приватно</small></span><span>Feishu<small>Lark</small></span><span>DingTalk<small>бот</small></span><span>WeCom<small>бот</small></span><span>WeChat<small>Weixin</small></span><span>QQ<small>бот</small></span><span>Home Assistant<small>умный дом</small></span><span>ntfy<small>уведомления</small></span><span>Webhook<small>входящие</small></span><span>OpenAI API<small>совместимый сервер</small></span>
+      </div>
+      <div class="donors rv">
+        <p class="lbl brass">Модели предоставлены</p>
+        <p class="donor-list"><em>Nous Portal</em> <i>·</i> OpenRouter <i>·</i> <em>Anthropic</em> <i>·</i> OpenAI Codex <i>·</i> <em>Gemini</em> <i>·</i> xAI <i>·</i> <em>DeepSeek</em> <i>·</i> Qwen <i>·</i> <em>Kimi</em> <i>·</i> MiniMax <i>·</i> <em>z.ai</em> <i>·</i> NVIDIA NIM <i>·</i> <em>Hugging Face</em> <i>·</i> Bedrock <i>·</i> <em>Azure</em> <i>·</i> Copilot <i>·</i> <em>Perplexity</em> <i>·</i> LM Studio <i>·</i> <em>и ваш собственный endpoint</em></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block exhibits" id="hall-4" data-sec="hall-4">
+    <div class="wrap">
+      <div class="hall-head rv">
+        <p class="lbl brass no">Зал IV</p>
+        <h2>Экспонаты</h2>
+        <p>Шесть вещей, которые уже есть в открытом репозитории и включаются командами hermes setup и hermes tools.</p>
+      </div>
+      <div class="ex-grid">
+        <article class="ex ex-1 rv">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">I</div>
+<pre><span class="b">❯</span> почему упал ночной деплой?
+<span class="d">┊</span> 📚 skill     <span class="d">fly-deploy</span>
+<span class="d">┊</span> 💻 $         <span class="d">fly logs -a shop --since 8h</span>
+<span class="d">┊</span> 🔧 patch     <span class="d">migrations/0042_orders.sql</span>
+<span class="d">┊</span> 💻 $         <span class="d">pytest tests/db -q</span>  <span class="ok">48 passed</span></pre>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат I · интерфейс</span><h3>Настоящий терминал</h3><p>TUI с многострочным вводом, автодополнением команд и потоковым выводом инструментов. Перебить агента и дать новое указание можно в любой момент.</p><code>hermes · hermes --tui</code></div>
+        </article>
+        <article class="ex ex-2 rv" style="--d:.1s">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">II</div>
+<div class="rows"><span class="b">0 9 * * 1-5</span>  сводка в Telegram
+<span class="b">every 2h</span>     логи прода
+<span class="b">0 3 * * *</span>    бэкап и отчёт</div>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат II · расписание</span><h3>Работает, пока вы спите</h3><p>Встроенный планировщик. Задачу описываете словами, результат приходит в нужный чат.</p><code>hermes cron · cronjob</code></div>
+        </article>
+        <article class="ex ex-3 rv">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">III</div>
+<pre>hermes
+<span class="d">├─</span> исследовать API
+<span class="d">├─</span> написать миграцию
+<span class="d">└─</span> обновить документацию</pre>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат III · делегирование</span><h3>Субагенты</h3><p>Независимые части работы уходят изолированным исполнителям и идут параллельно.</p><code>delegate_task · kanban</code></div>
+        </article>
+        <article class="ex ex-4 rv" style="--d:.1s">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">IV</div>
+            <div class="chips"><span>local</span><span>docker</span><span>ssh</span><span>singularity</span><span>modal</span><span>daytona</span></div>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат IV · среды</span><h3>Не только ноутбук</h3><p>Серверные среды засыпают в простое и почти ничего не стоят между сессиями.</p><code>terminal.backend</code></div>
+        </article>
+        <article class="ex ex-5 rv">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">V</div>
+<pre><span class="d">approval</span>  rm -rf build/  <span class="b">[/approve · /deny]</span>
+<span class="d">pairing</span>   новый чат ждёт подтверждения</pre>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат V · безопасность</span><h3>Под вашим контролем</h3><p>Опасные команды ждут подтверждения, чужие чаты отсекаются привязкой, а запуск можно изолировать в контейнере.</p><code>security · approvals</code></div>
+        </article>
+        <article class="ex ex-6 rv" style="--d:.1s">
+          <div class="ex-frame"><div class="ex-in">
+            <div class="roman">VI</div>
+            <div class="chips"><span>навыки</span><span>MCP-серверы</span><span>плагины</span><span>хуки</span><span>профили</span></div>
+          </div></div>
+          <div class="ex-cap"><span class="lbl">Экспонат VI · расширения</span><h3>Растёт навыками</h3><p>Новые возможности приходят как навыки, MCP-серверы и плагины. Ядро остаётся компактным, а кэш промпта не сбрасывается посреди разговора.</p><code>~/.hermes/plugins · agentskills.io</code></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block visit" id="visit" data-sec="visit">
+    <div class="wrap">
+      <div class="placard rv">
+        <p class="lbl brass">Информация для посетителей</p>
+        <h2>Как попасть<br>на выставку</h2>
+        <ol>
+          <li><span>I</span><div><b>Установите</b><p>Скрипт сам поставит Python 3.11, Node.js, ripgrep и ffmpeg.</p></div></li>
+          <li><span>II</span><div><b>Настройте</b><p>Мастер <code>hermes setup</code> спросит модель, инструменты и мессенджеры.</p></div></li>
+          <li><span>III</span><div><b>Говорите</b><p>Запустите <code>hermes</code> в терминале или напишите боту.</p></div></li>
+        </ol>
+      </div>
+      <div class="rv" style="--d:.15s">
+        <div class="console">
+          <div class="c-bar" role="tablist" aria-label="Система">
+            <button class="tab" type="button" role="tab" aria-selected="true" id="t-unix" data-p="$" data-cmd="curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash">Linux · macOS · WSL</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" id="t-win" data-p="PS>" data-cmd="iex (irm https://hermes-agent.nousresearch.com/install.ps1)">Windows</button>
+            <button class="copy" type="button" id="copy">Копировать</button>
+          </div>
+<pre><span class="p" id="c-p">$</span> <span id="c-cmd">curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash</span>
+<span class="d">  uv · python 3.11 · node · ripgrep · ffmpeg</span>  <span class="ok">готово</span>
+
+<span class="p">$</span> hermes setup
+<span class="d">  провайдер: Nous Portal</span> <span class="ok">✓</span>  <span class="d">шлюз: Telegram</span> <span class="ok">✓</span>
+
+<span class="p">$</span> hermes
+<span class="p">☤</span> Hermes Agent на связи. Чем займёмся?
+<span class="p">❯</span> <span class="cursor"></span></pre>
+        </div>
+        <p class="visit-note">Подробная инструкция есть в <a href="https://hermes-agent.nousresearch.com/docs/getting-started/quickstart" style="border-bottom:1px solid var(--brass)">документации</a>. На Android агент ставится через Termux.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div class="f-mark" aria-hidden="true">HERMES</div>
+      <p class="f-note">Неофициальная страница о Hermes Agent. Проект создан Nous Research и распространяется под лицензией MIT.</p>
+    </div>
+    <div class="f-links">
+      <a href="https://hermes-agent.nousresearch.com/docs/">Документация</a>
+      <a href="https://github.com/NousResearch/hermes-agent">GitHub</a>
+      <a href="https://discord.gg/NousResearch">Discord</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+  root.classList.add('js');
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };
+  var ease = function (t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+  var smooth = function (a, b, t) { var x = clamp((t - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+  var vw = innerWidth, vh = innerHeight;
+
+  var doors = document.getElementById('doors');
+  var opened = reduce;
+  if (!reduce) {
+    setTimeout(function () { opened = true; }, 1500);
+    setTimeout(function () { doors.style.display = 'none'; }, 2700);
+  }
+
+  /* reveals */
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.rv').forEach(function (el) { io.observe(el); });
+  var uo = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.querySelectorAll('.unveil').forEach(function (u) { u.classList.add('in'); }); uo.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.unveil').forEach(function (el) { uo.observe(el.parentElement); });
+
+  /* console */
+  var tabs = document.querySelectorAll('.tab'), cCmd = document.getElementById('c-cmd'), cP = document.getElementById('c-p'), copy = document.getElementById('copy');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.setAttribute('aria-selected', String(x === t)); });
+      cCmd.textContent = t.dataset.cmd; cP.textContent = t.dataset.p; copy.textContent = 'Копировать';
+    });
+  });
+  copy.addEventListener('click', function () {
+    var ok = function () { copy.textContent = 'Скопировано'; };
+    var fail = function () { var r = document.createRange(); r.selectNodeContents(cCmd); var s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = 'Выделено: Ctrl+C'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cCmd.textContent).then(ok, fail); else fail();
+  });
+
+  /* horizontal gallery + nav state */
+  var top = document.getElementById('top');
+  var gallery = document.getElementById('hall-1'), track = document.getElementById('g-track'), bar = document.getElementById('g-bar'), gNow = document.getElementById('g-now');
+  var sections = document.querySelectorAll('main > section'), links = document.querySelectorAll('a[data-sec]');
+  var ROM = ['I', 'II', 'III', 'IV'], travel = 0, gp = 0;
+  function sizeGallery() {
+    travel = Math.max(0, track.scrollWidth - vw);
+    gallery.style.height = (travel + vh * 1.25) + 'px';
+  }
+  function onScroll() {
+    top.classList.toggle('solid', scrollY > 40);
+    var r = gallery.getBoundingClientRect();
+    gp = clamp(-r.top / Math.max(1, r.height - vh), 0, 1);
+    track.style.transform = 'translate3d(' + (-gp * travel).toFixed(1) + 'px,0,0)';
+    bar.style.setProperty('--p', gp.toFixed(3));
+    gNow.textContent = ROM[Math.min(3, Math.floor(gp * 4))];
+    var cur = 'vestibule';
+    sections.forEach(function (s) { if (s.getBoundingClientRect().top < vh * .45) cur = s.dataset.sec; });
+    links.forEach(function (a) { a.classList.toggle('on', a.dataset.sec === cur); });
+  }
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', function () { vw = innerWidth; vh = innerHeight; sizeGallery(); onScroll(); });
+  sizeGallery(); onScroll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { sizeGallery(); onScroll(); });
+
+  /* ---------- WebGL memory crystal ---------- */
+  var canvas = document.getElementById('stage');
+  if (!window.THREE) { root.classList.add('no-webgl'); return; }
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+  catch (e) { root.classList.add('no-webgl'); return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, vw < 820 ? 1.5 : 1.75));
+  renderer.setSize(vw, vh, false);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(30, vw / vh, 0.1, 100);
+  camera.position.set(0, 0, 12);
+  if (THREE.RoomEnvironment) scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new THREE.RoomEnvironment(), 0.03).texture;
+  scene.add(new THREE.AmbientLight(0x22356a, 0.6));
+  var key = new THREE.DirectionalLight(0xeaf1ff, 2.2); key.position.set(-3, 5, 6); scene.add(key);
+  var rim = new THREE.DirectionalLight(0x5b8eff, 3.5); rim.position.set(5, 1, -5); scene.add(rim);
+  var warm = new THREE.DirectionalLight(0xe0b77a, 0.6); warm.position.set(-5, -3, 2); scene.add(warm);
+
+  var pivot = new THREE.Group(); scene.add(pivot);
+  var gem = new THREE.Group(); pivot.add(gem);
+
+  var glass = new THREE.MeshPhysicalMaterial({
+    color: 0xf2f6ff, metalness: 0, roughness: 0.06, transmission: 1, ior: 1.55, thickness: 0.55,
+    attenuationColor: new THREE.Color(0x6f9bff), attenuationDistance: 4.5, specularIntensity: 1, specularColor: new THREE.Color(0xdfe9ff),
+    clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 0.3, iridescenceIOR: 1.3,
+    envMapIntensity: 2.4, flatShading: true, side: THREE.DoubleSide
+  });
+  var chrome = new THREE.MeshPhysicalMaterial({ color: 0x7f8db0, metalness: 1, roughness: 0.32, envMapIntensity: .8 });
+
+  // shards: a quartz crystal (octagonal prism with points), one wedge per face
+  var prof = [new THREE.Vector2(0.001, -1.55), new THREE.Vector2(0.7, -0.72), new THREE.Vector2(0.74, 0.62), new THREE.Vector2(0.001, 1.75)];
+  var base = new THREE.LatheGeometry(prof, 8).toNonIndexed();
+  var bp = base.attributes.position, shards = [];
+  var O = new THREE.Vector3(), P = [];
+  for (var i = 0; i < bp.count; i += 6) {
+    P = [];
+    for (var j = 0; j < 6; j++) P.push(new THREE.Vector3().fromBufferAttribute(bp, i + j));
+    var g = new THREE.Vector3(); P.forEach(function (p) { g.add(p); }); g.divideScalar(6);
+    O.copy(g).multiplyScalar(0.15);
+    var tri = [];
+    [[0, 1, 2], [3, 4, 5]].forEach(function (f) {
+      var a = P[f[0]], b = P[f[1]], c = P[f[2]];
+      tri.push(a, b, c, O, b, a, O, c, b, O, a, c);
+    });
+    var arr = new Float32Array(tri.length * 3);
+    tri.forEach(function (p, k) { arr[k * 3] = p.x - g.x; arr[k * 3 + 1] = p.y - g.y; arr[k * 3 + 2] = p.z - g.z; });
+    var geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(arr, 3)); geo.computeVertexNormals();
+    var m = new THREE.Mesh(geo, glass);
+    m.position.copy(g);
+    var dir = new THREE.Vector3(g.x, g.y * .6, g.z).normalize();
+    m.userData = { home: g.clone(), dir: dir, dist: 1.3 + Math.random() * 2.3, axis: new THREE.Vector3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize(), turn: (Math.random() - .5) * 5, lift: (Math.random() - .5) * 1.6 };
+    gem.add(m); shards.push(m);
+  }
+  var core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), new THREE.MeshBasicMaterial({ color: 0xb5ceff, toneMapped: false }));
+  gem.add(core);
+  var coreLight = new THREE.PointLight(0x5b8eff, 3, 6); gem.add(coreLight);
+
+  // chrome cage: dodecahedron edges as thin rods
+  var cage = new THREE.Group();
+  var dod = new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(1.5, 0));
+  var ep = dod.attributes.position, up = new THREE.Vector3(0, 1, 0);
+  for (var e = 0; e < ep.count; e += 2) {
+    var p1 = new THREE.Vector3().fromBufferAttribute(ep, e), p2 = new THREE.Vector3().fromBufferAttribute(ep, e + 1);
+    p1.y *= 1.28; p2.y *= 1.28;
+    var len = p1.distanceTo(p2);
+    var rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, len, 6), chrome);
+    rod.position.copy(p1).add(p2).multiplyScalar(0.5);
+    rod.quaternion.setFromUnitVectors(up, p2.clone().sub(p1).normalize());
+    cage.add(rod);
+  }
+  var nodeGeo = new THREE.SphereGeometry(0.022, 10, 8), seen = {};
+  for (var n = 0; n < ep.count; n++) {
+    var q = new THREE.Vector3().fromBufferAttribute(ep, n); q.y *= 1.28;
+    var kk = q.toArray().map(function (x) { return x.toFixed(2); }).join();
+    if (seen[kk]) continue; seen[kk] = 1;
+    var nd = new THREE.Mesh(nodeGeo, chrome); nd.position.copy(q); cage.add(nd);
+  }
+  pivot.add(cage);
+
+  // light slit + partial arc behind the crystal
+  function tex(w, h, draw) { var c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; }
+  var slitTex = tex(128, 1024, function (g2, w, h) {
+    var gr = g2.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(.35, 'rgba(255,255,255,1)'); gr.addColorStop(.65, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    var gx = g2.createLinearGradient(0, 0, w, 0);
+    gx.addColorStop(0, 'rgba(60,110,255,0)'); gx.addColorStop(.42, 'rgba(90,140,255,.35)'); gx.addColorStop(.5, 'rgba(235,242,255,1)'); gx.addColorStop(.58, 'rgba(90,140,255,.35)'); gx.addColorStop(1, 'rgba(60,110,255,0)');
+    g2.fillStyle = gx; g2.fillRect(0, 0, w, h);
+    g2.globalCompositeOperation = 'destination-in'; g2.fillStyle = gr; g2.fillRect(0, 0, w, h);
+  });
+  var arcTex = tex(1024, 1024, function (g2, S) {
+    g2.translate(S / 2, S / 2); g2.globalCompositeOperation = 'lighter'; g2.lineCap = 'round';
+    [[50, 'rgba(70,120,255,.35)', 18], [18, 'rgba(140,180,255,.6)', 6], [6, 'rgba(235,242,255,.95)', 2]].forEach(function (p) {
+      g2.shadowBlur = p[0]; g2.shadowColor = p[1]; g2.strokeStyle = p[1]; g2.lineWidth = p[2];
+      g2.beginPath(); g2.arc(0, 0, 440, Math.PI * 0.72, Math.PI * 2.28); g2.stroke();
+    });
+    g2.fillStyle = 'rgba(194,163,111,.9)'; g2.shadowBlur = 12; g2.shadowColor = 'rgba(194,163,111,.8)';
+    g2.beginPath(); g2.arc(Math.cos(Math.PI * 0.72) * 440, Math.sin(Math.PI * 0.72) * 440, 5, 0, Math.PI * 2); g2.fill();
+  });
+  var addMat = function (t) { return new THREE.MeshBasicMaterial({ map: t, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }); };
+  var slit = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 9), addMat(slitTex)); slit.position.z = -2.2; scene.add(slit);
+  var arcMat = addMat(arcTex);
+  var arc = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 6.2), arcMat); arc.position.z = -2; scene.add(arc);
+
+  // dust
+  var dotTex = tex(64, 64, function (g2, S) { var gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.4, 'rgba(180,205,255,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, S, S); });
+  var N = vw < 820 ? 220 : 420, dust = new Float32Array(N * 3);
+  for (var d = 0; d < N; d++) { dust[d * 3] = (Math.random() - .5) * 20; dust[d * 3 + 1] = (Math.random() - .5) * 12; dust[d * 3 + 2] = -7 + Math.random() * 8; }
+  var dGeo = new THREE.BufferGeometry(); dGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
+  var pts = new THREE.Points(dGeo, new THREE.PointsMaterial({ size: 0.055, map: dotTex, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xb8ccff }));
+  scene.add(pts);
+
+  // choreography
+  var cat = document.getElementById('hall-2'), wall = document.getElementById('hall-3');
+  function lerp(a, b, k) { var o = {}; for (var key in a) o[key] = a[key] + (b[key] - a[key]) * k; return o; }
+  function target() {
+    var mob = vw < 960, asp = Math.min(1, (vw / vh) / 1.78);
+    var H = mob ? { x: 0, y: 1.25, s: .58, o: .9, k: 0 } : { x: 2.3 * asp, y: .3, s: 1, o: 1, k: 0 };
+    var G = mob ? { x: 0, y: .9, s: .72, o: .32, k: 1 } : { x: .4 * asp, y: .15, s: 1.05, o: .85, k: 1 };
+    var Ct = mob ? { x: 0, y: 2.1, s: .34, o: .25, k: 0 } : { x: 3.1 * asp, y: 2.05, s: .3, o: .8, k: 0 };
+    var Z = { x: Ct.x, y: Ct.y + 2.5, s: .4, o: 0, k: 0 };
+    var y = scrollY, gr = gallery.getBoundingClientRect(), gTop = gr.top + y, gEnd = gTop + gr.height - vh;
+    var cTop = cat.getBoundingClientRect().top + y, wTop = wall.getBoundingClientRect().top + y;
+    var st;
+    if (y < gTop) { var k0 = ease(clamp(y / Math.max(1, gTop), 0, 1)); st = lerp(H, G, k0); st.k = 0; }
+    else if (y <= gEnd) {
+      var k1 = (y - gTop) / Math.max(1, gEnd - gTop);
+      st = lerp(G, G, 0); st.k = smooth(.04, .3, k1) * (1 - smooth(.72, .96, k1));
+    }
+    else if (y < wTop - vh * .3) { var k2 = ease(clamp((y - gEnd) / Math.max(1, cTop - gEnd), 0, 1)); st = lerp(G, Ct, k2); st.k = 0; }
+    else { var k3 = ease(clamp((y - (wTop - vh * .3)) / (vh * .6), 0, 1)); st = lerp(Ct, Z, k3); }
+    return st;
+  }
+
+  var mouse = { x: 0, y: 0 }, cur = null, op = 0, visible = true;
+  addEventListener('pointermove', function (ev) { mouse.x = ev.clientX / vw * 2 - 1; mouse.y = ev.clientY / vh * 2 - 1; }, { passive: true });
+  document.addEventListener('visibilitychange', function () { visible = !document.hidden; });
+  addEventListener('resize', function () { renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.updateProjectionMatrix(); });
+  var Q = new THREE.Quaternion(), clock = new THREE.Clock();
+
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!visible) return;
+    var __n = performance.now(), __dt = Math.min(.1, (__n - (frame.__l || __n)) / 1000) || 1 / 60; frame.__l = __n; var __k = function (r) { return 1 - Math.pow(1 - r, __dt * 60); };
+    var t = clock.getElapsedTime(), tg = target();
+    if (!cur) cur = Object.assign({}, tg);
+    var f = reduce ? 1 : __k(.07);
+    ['x', 'y', 's', 'k'].forEach(function (p) { cur[p] += (tg[p] - cur[p]) * (p === 'k' ? .085 : f); });
+    op += ((opened ? tg.o : 0) - op) * __k(.06);
+    canvas.style.opacity = op.toFixed(3);
+    if (op < .01) return;
+
+    var bob = reduce ? 0 : Math.sin(t * .7) * .07;
+    pivot.position.set(cur.x, cur.y + bob, 0);
+    pivot.scale.setScalar(cur.s);
+    gem.rotation.y = (reduce ? 0 : t * .18) + mouse.x * .4;
+    gem.rotation.x += (mouse.y * .15 - gem.rotation.x) * .05;
+    cage.rotation.y = -(reduce ? 0 : t * .1) + mouse.x * .2;
+    cage.rotation.z = .12;
+    var k = ease(clamp(cur.k, 0, 1));
+    cage.scale.setScalar(1 + k * .55);
+    shards.forEach(function (m) {
+      var u = m.userData;
+      m.position.copy(u.home).addScaledVector(u.dir, k * u.dist);
+      m.position.y += k * u.lift;
+      Q.setFromAxisAngle(u.axis, k * u.turn + (reduce ? 0 : k * t * .3 * Math.sign(u.turn)));
+      m.quaternion.copy(Q);
+    });
+    core.scale.setScalar(1 + k * .6 + (reduce ? 0 : Math.sin(t * 2) * .06));
+    coreLight.intensity = 3 + k * 4;
+
+    var depth = (camera.position.z + 2.1) / camera.position.z;
+    slit.position.x += (cur.x * depth - slit.position.x) * .06;
+    slit.position.y = cur.y * depth;
+    slit.scale.set(cur.s * (1 + k * 1.5), cur.s, 1);
+    arc.position.x += (cur.x * depth - arc.position.x) * .06;
+    arc.position.y += (cur.y * depth - arc.position.y) * .06;
+    arc.scale.setScalar(cur.s * (1 + k * .35));
+    arc.rotation.z = reduce ? 0 : -t * .08;
+    arcMat.opacity = .9 - k * .4;
+
+    if (!reduce) { for (var j = 0; j < N; j++) { var yi = j * 3 + 1; dust[yi] += .002 + (j % 5) * .0004; if (dust[yi] > 6) dust[yi] = -6; } dGeo.attributes.position.needsUpdate = true; }
+    pts.position.y = -scrollY * .001;
+    renderer.render(scene, camera);
+  }
+  frame();
+})();
+</script>
+
+</body>
+</html>
