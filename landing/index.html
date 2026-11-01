@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hermes Agent</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Hermes Agent — самообучающийся ИИ-агент: помнит вас между сессиями, сам пишет навыки, живёт в терминале и в двух десятках мессенджеров.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: terminal-first single column; amber-on-ink brand from website/src/css/custom.css,
+   hero = real install command + a live-looking session, then the learning loop as a 4-step cycle. */
+:root {
+  --bg: #07070d;
+  --surface: #0f0f18;
+  --surface-2: #14142a;
+  --fg: #e8e4dc;
+  --muted: #9a968e;
+  --line: rgba(255, 215, 0, 0.10);
+  --accent: #ffd700;
+  --accent-ink: #07070d;
+  --accent-soft: rgba(255, 215, 0, 0.08);
+  --ok: #7ad49a;
+  --dots: rgba(255, 215, 0, 0.035);
+
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.1rem, 1.4rem + 3vw, 3.6rem);
+
+  --radius: 10px;
+  --wrap: 1120px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fbfaf6;
+    --surface: #ffffff;
+    --surface-2: #f3efe2;
+    --fg: #1c1a14;
+    --muted: #615c50;
+    --line: rgba(122, 88, 0, 0.16);
+    --accent: #7a5800;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(139, 101, 8, 0.08);
+    --ok: #1f7a43;
+    --dots: rgba(122, 88, 0, 0.06);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fbfaf6;
+  --surface: #ffffff;
+  --surface-2: #f3efe2;
+  --fg: #1c1a14;
+  --muted: #615c50;
+  --line: rgba(122, 88, 0, 0.16);
+  --accent: #7a5800;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(139, 101, 8, 0.08);
+  --ok: #1f7a43;
+  --dots: rgba(122, 88, 0, 0.06);
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.15; letter-spacing: -0.02em; }
+p { margin: 0; }
+code, kbd, .mono { font-family: var(--font-mono); }
+
+.wrap {
+  max-width: var(--wrap);
+  margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- header ---------- */
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--bg);
+}
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; align-items: center; gap: 24px; padding-block: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--fg); font-weight: 700; letter-spacing: -0.01em; }
+.brand:hover { text-decoration: none; }
+.brand .glyph { color: var(--accent); font-size: 1.35rem; line-height: 1; }
+.brand .ver { font-family: var(--font-mono); font-size: var(--step--1); color: var(--muted); font-weight: 400; }
+.nav { display: flex; gap: 22px; margin-left: auto; font-size: 0.9375rem; }
+.nav a { color: var(--muted); }
+.nav a:hover { color: var(--fg); text-decoration: none; }
+.nav .gh { color: var(--fg); font-weight: 600; }
+@media (max-width: 720px) { .nav a:not(.gh) { display: none; } }
+
+/* ---------- hero ---------- */
+.hero .wrap {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 56px; align-items: center; padding-block: 72px 64px;
+}
+@media (max-width: 920px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-block: 48px; } }
+.eyebrow {
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--accent);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 18px;
+}
+.hero h1 { font-size: var(--step-3); font-weight: 800; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.lede { color: var(--muted); font-size: 1.125rem; max-width: 34em; margin-top: 20px; }
+
+.install { margin-top: 32px; }
+.tabs { display: flex; gap: 4px; margin-bottom: -1px; position: relative; z-index: 1; flex-wrap: wrap; }
+.tab {
+  font: 500 var(--step--1) var(--font-mono); color: var(--muted);
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  padding: 8px 14px; border-radius: 8px 8px 0 0; cursor: pointer;
+}
+.tab[aria-selected="true"] { color: var(--fg); background: var(--surface); border-color: var(--line); }
+.cmd {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 0 var(--radius) var(--radius) var(--radius);
+  padding: 14px 14px 14px 18px;
+}
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.9rem; scrollbar-width: thin; }
+.cmd code .p { color: var(--accent); user-select: none; margin-right: 10px; }
+.copy {
+  flex: none; font: 600 var(--step--1) var(--font-body);
+  background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 7px;
+  padding: 8px 14px; cursor: pointer;
+}
+.copy:hover { filter: brightness(1.08); }
+.after { margin-top: 12px; font-size: var(--step--1); color: var(--muted); }
+.after code { color: var(--fg); }
+.cta { display: flex; gap: 20px; margin-top: 28px; flex-wrap: wrap; font-weight: 600; }
+
+/* terminal mock */
+.term {
+  background: #0b0b12; color: #e8e4dc;
+  border: 1px solid rgba(255, 215, 0, 0.14); border-radius: 12px;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.55);
+  overflow: hidden; min-width: 0;
+}
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid rgba(255, 215, 0, 0.08); }
+.term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #2a2a3a; display: block; }
+.term-bar span { margin-left: 8px; font: 500 0.75rem var(--font-mono); color: #8a867e; }
+.term pre {
+  margin: 0; padding: 18px 20px 22px; overflow-x: auto;
+  font: 0.8125rem/1.75 var(--font-mono); white-space: pre;
+}
+.t-gold { color: #ffd700; }
+.t-dim { color: #7d7a72; }
+.t-ok { color: #7ad49a; }
+.t-you { color: #e8e4dc; font-weight: 700; }
+.caret { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: -0.2em; background: #ffd700; animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- stats strip ---------- */
+.stats { border-block: 1px solid var(--line); background: var(--accent-soft); }
+.stats .wrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding-block: 26px; gap: 16px; }
+@media (max-width: 720px) { .stats .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat b { display: block; font: 700 var(--step-2) var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.stat span { font-size: var(--step--1); color: var(--muted); }
+
+/* ---------- sections ---------- */
+section.block .wrap { padding-block: 88px 0; }
+.sec-head { max-width: 40em; margin-bottom: 40px; }
+.sec-head h2 { font-size: var(--step-2); font-weight: 700; }
+.sec-head p { color: var(--muted); margin-top: 12px; font-size: 1.0625rem; }
+
+/* learning loop */
+.loop { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; position: relative; }
+.loop li { position: relative; padding: 22px 22px 24px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.loop li + li { border-left: none; }
+.loop li:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.loop li:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.loop .n { font: 500 var(--step--1) var(--font-mono); color: var(--accent); }
+.loop h3 { font-size: 1.0625rem; margin-top: 10px; }
+.loop p { color: var(--muted); font-size: 0.9375rem; margin-top: 8px; }
+.loop .where { display: inline-block; margin-top: 14px; font: 0.75rem var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; }
+.loop li:not(:last-child)::after {
+  content: "→"; position: absolute; right: -11px; top: 22px; z-index: 1;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  background: var(--bg); color: var(--accent); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 50%;
+}
+.loop-back { display: flex; align-items: center; gap: 14px; margin-top: 14px; color: var(--muted); font-size: 0.9375rem; }
+.loop-back svg { flex: none; }
+@media (max-width: 860px) {
+  .loop { grid-template-columns: minmax(0, 1fr); }
+  .loop li + li { border-left: 1px solid var(--line); border-top: none; }
+  .loop li:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+  .loop li:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+  .loop li:not(:last-child)::after { content: "↓"; right: 22px; top: auto; bottom: -11px; }
+}
+
+/* features */
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+@media (max-width: 920px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .features { grid-template-columns: minmax(0, 1fr); } }
+.feat { background: var(--bg); padding: 26px 24px 28px; min-width: 0; }
+.feat h3 { font-size: 1.0625rem; }
+.feat p { color: var(--muted); font-size: 0.9375rem; margin-top: 8px; }
+.feat code { font-size: 0.8125rem; color: var(--fg); background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; }
+
+/* chips */
+.chip-group + .chip-group { margin-top: 28px; }
+.chip-group h3 { font: 500 var(--step--1) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 0.875rem; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.chip.more { color: var(--muted); border-style: dashed; background: transparent; }
+
+/* commands */
+.cmds-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table.cmds { width: 100%; border-collapse: collapse; min-width: 520px; }
+.cmds td { padding: 13px 18px; border-top: 1px solid var(--line); vertical-align: top; }
+.cmds tr:first-child td { border-top: none; }
+.cmds td:first-child { white-space: nowrap; width: 1%; }
+.cmds code { color: var(--accent); font-size: 0.875rem; }
+.cmds td:last-child { color: var(--muted); font-size: 0.9375rem; }
+
+/* closing */
+.closing .wrap { padding-block: 96px 88px; }
+.closing-card {
+  border: 1px solid var(--line); border-radius: 14px; padding: 44px 40px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--surface);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center;
+}
+@media (max-width: 760px) { .closing-card { grid-template-columns: minmax(0, 1fr); padding: 30px 22px; } }
+.closing-card h2 { font-size: var(--step-2); }
+.closing-card p { color: var(--muted); margin-top: 10px; }
+.btn {
+  display: inline-block; font-weight: 600; padding: 12px 20px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-ink); white-space: nowrap;
+}
+.btn:hover { text-decoration: none; filter: brightness(1.08); }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+footer { border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; padding-block: 28px; font-size: var(--step--1); color: var(--muted); }
+footer .wrap > :last-child { margin-left: auto; }
+@media (max-width: 600px) { footer .wrap > :last-child { margin-left: 0; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="glyph" aria-hidden="true">☤</span> Hermes Agent <span class="ver">v0.16</span></a>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#loop">Как учится</a>
+      <a href="#features">Возможности</a>
+      <a href="#reach">Платформы</a>
+      <a href="#commands">Команды</a>
+      <a class="gh" href="https://github.com/NousResearch/hermes-agent">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">Открытый агент · MIT</p>
+        <h1>ИИ-агент, который <em>учится</em> у&nbsp;вас</h1>
+        <p class="lede">Hermes помнит вас между сессиями, сам превращает удачные решения в навыки и работает где угодно: в терминале, в Telegram или на сервере за $5 в месяц. Подключайте любую модель и меняйте её одной командой.</p>
+
+        <div class="install">
+          <div class="tabs" role="tablist" aria-label="Система">
+            <button class="tab" role="tab" id="tab-unix" aria-selected="true" aria-controls="cmd-box" data-cmd="curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash" data-prompt="$">Linux · macOS · WSL</button>
+            <button class="tab" role="tab" id="tab-win" aria-selected="false" aria-controls="cmd-box" data-cmd="iex (irm https://hermes-agent.nousresearch.com/install.ps1)" data-prompt="PS&gt;">Windows</button>
+          </div>
+          <div class="cmd" id="cmd-box" role="tabpanel">
+            <code><span class="p" id="cmd-prompt">$</span><span id="cmd-text">curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash</span></code>
+            <button class="copy" id="copy-btn" type="button">Копировать</button>
+          </div>
+          <p class="after">Установщик сам поставит Python 3.11, Node.js, ripgrep и ffmpeg. Потом запустите <code>hermes</code>.</p>
+        </div>
+
+        <div class="cta">
+          <a href="https://hermes-agent.nousresearch.com/docs/getting-started/quickstart">Быстрый старт →</a>
+          <a href="https://hermes-agent.nousresearch.com/docs/">Документация</a>
+        </div>
+      </div>
+
+      <figure class="term" aria-label="Пример сессии Hermes в терминале" style="margin:0">
+        <div class="term-bar"><i></i><i></i><i></i><span>hermes — ~/projects/shop</span></div>
+<pre><span class="t-gold">☤ Hermes Agent</span> <span class="t-dim">· deepseek/deepseek-v4-flash</span>
+
+<span class="t-gold">❯</span> <span class="t-you">разберись, почему упал ночной деплой, и почини</span>
+
+<span class="t-dim">┊</span> 📚 skill     <span class="t-dim">fly-deploy</span>
+<span class="t-dim">┊</span> 💻 $         <span class="t-dim">fly logs -a shop --since 8h</span>    <span class="t-dim">2.1s</span>
+<span class="t-dim">┊</span> 📖 read      <span class="t-dim">migrations/0042_orders.sql</span>    <span class="t-dim">0.1s</span>
+<span class="t-dim">┊</span> 🔧 patch     <span class="t-dim">migrations/0042_orders.sql</span>    <span class="t-dim">0.2s</span>
+<span class="t-dim">┊</span> 💻 $         <span class="t-dim">pytest tests/db -q</span>  <span class="t-ok">48 passed</span>  <span class="t-dim">6.4s</span>
+
+Миграция 0042 добавляла NOT NULL-колонку без
+значения по умолчанию. Добавил DEFAULT и бэкфилл,
+тесты зелёные. Открыть PR?
+
+<span class="t-dim">┊</span> 🧠 memory    <span class="t-dim">+memory: "shop: миграции с DEFAULT"</span>
+
+<span class="t-gold">❯</span> <span class="caret" aria-hidden="true"></span></pre>
+      </figure>
+    </div>
+  </section>
+
+  <div class="stats">
+    <div class="wrap">
+      <div class="stat"><b>25+</b><span>мессенджеров и каналов</span></div>
+      <div class="stat"><b>30+</b><span>провайдеров моделей</span></div>
+      <div class="stat"><b>170</b><span>готовых навыков</span></div>
+      <div class="stat"><b>6</b><span>сред выполнения: local, Docker, SSH…</span></div>
+    </div>
+  </div>
+
+  <section class="block" id="loop">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Замкнутый цикл обучения</h2>
+        <p>Обычный агент каждый раз начинает с нуля. Hermes после каждой задачи становится немного лучше: запоминает контекст, сохраняет приёмы и находит их в следующий раз.</p>
+      </div>
+      <ol class="loop">
+        <li>
+          <span class="n">шаг 1</span>
+          <h3>Решает задачу</h3>
+          <p>Работает в настоящем терминале и браузере, читает и правит файлы, делегирует части работы субагентам.</p>
+          <span class="where">terminal · browser · delegate</span>
+        </li>
+        <li>
+          <span class="n">шаг 2</span>
+          <h3>Пишет навык</h3>
+          <p>После сложной задачи сам оформляет удачный подход в навык и улучшает его при следующих запусках.</p>
+          <span class="where">~/.hermes/skills/</span>
+        </li>
+        <li>
+          <span class="n">шаг 3</span>
+          <h3>Запоминает вас</h3>
+          <p>Ведёт память о проектах и предпочтениях и строит модель пользователя, которая уточняется от сессии к сессии.</p>
+          <span class="where">MEMORY.md · USER.md</span>
+        </li>
+        <li>
+          <span class="n">шаг 4</span>
+          <h3>Находит прошлое</h3>
+          <p>Полнотекстовый поиск по всем прошлым разговорам с краткими выжимками от LLM: «как мы чинили это в марте?»</p>
+          <span class="where">FTS5 session search</span>
+        </li>
+      </ol>
+      <p class="loop-back">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"/></svg>
+        Следующая задача начинается с того, что агент уже знает. Устаревшие навыки куратор отправляет в архив, ничего не удаляя.
+      </p>
+    </div>
+  </section>
+
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Одно ядро, много поверхностей</h2>
+        <p>Один и тот же агент работает в CLI, в полноэкранном TUI, в десктопном приложении и в мессенджерах. Сессии, память и навыки общие.</p>
+      </div>
+      <div class="features">
+        <div class="feat"><h3>Настоящий терминал</h3><p>TUI с многострочным вводом, автодополнением слэш-команд, историей и потоковым выводом инструментов. Перебить и перенаправить можно в любой момент.</p></div>
+        <div class="feat"><h3>Живёт в мессенджерах</h3><p>Telegram, Discord, Slack, WhatsApp, Signal и ещё два десятка платформ из одного процесса <code>hermes gateway</code>. Голосовые сообщения расшифровываются.</p></div>
+        <div class="feat"><h3>Задачи по расписанию</h3><p>Встроенный cron: ежедневные отчёты, ночные бэкапы, недельные аудиты. Описываете словами, результат приходит в нужный чат.</p></div>
+        <div class="feat"><h3>Субагенты</h3><p>Параллельные изолированные исполнители для независимых веток работы и общая доска задач Kanban для нескольких профилей.</p></div>
+        <div class="feat"><h3>Работает не только на ноутбуке</h3><p>Локально, в Docker, по SSH, в Singularity, Modal или Daytona. Серверные среды засыпают в простое и почти ничего не стоят.</p></div>
+        <div class="feat"><h3>Расширяется плагинами</h3><p>Навыки по стандарту agentskills.io, MCP-серверы, плагины с инструментами, хуками и своими командами <code>hermes &lt;plugin&gt;</code>.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="reach">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Где он доступен и на чём работает</h2>
+        <p>Модель меняется командой <code>/model</code> прямо в разговоре, без правки кода и без привязки к одному поставщику.</p>
+      </div>
+      <div class="chip-group">
+        <h3>Мессенджеры и каналы</h3>
+        <div class="chips">
+          <span class="chip">Telegram</span><span class="chip">Discord</span><span class="chip">Slack</span><span class="chip">WhatsApp</span><span class="chip">Signal</span><span class="chip">Matrix</span><span class="chip">Mattermost</span><span class="chip">Microsoft Teams</span><span class="chip">Google Chat</span><span class="chip">iMessage (BlueBubbles)</span><span class="chip">Email</span><span class="chip">SMS</span><span class="chip">LINE</span><span class="chip">IRC</span><span class="chip">SimpleX</span><span class="chip">Feishu / Lark</span><span class="chip">DingTalk</span><span class="chip">WeCom</span><span class="chip">WeChat</span><span class="chip">QQ</span><span class="chip">Home Assistant</span><span class="chip">ntfy</span><span class="chip">Webhook</span><span class="chip">OpenAI-совместимый API</span>
+        </div>
+      </div>
+      <div class="chip-group">
+        <h3>Провайдеры моделей</h3>
+        <div class="chips">
+          <span class="chip">Nous Portal</span><span class="chip">OpenRouter</span><span class="chip">Anthropic</span><span class="chip">OpenAI Codex</span><span class="chip">Gemini</span><span class="chip">xAI</span><span class="chip">DeepSeek</span><span class="chip">Qwen</span><span class="chip">Kimi</span><span class="chip">MiniMax</span><span class="chip">z.ai / GLM</span><span class="chip">NVIDIA NIM</span><span class="chip">Hugging Face</span><span class="chip">AWS Bedrock</span><span class="chip">Azure Foundry</span><span class="chip">GitHub Copilot</span><span class="chip">Perplexity</span><span class="chip">Ollama Cloud</span><span class="chip">LM Studio</span><span class="chip more">свой endpoint</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="commands">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>Первые команды</h2>
+        <p>Всё настраивается из терминала. Мастер <code>hermes setup</code> проведёт по шагам.</p>
+      </div>
+      <div class="cmds-wrap">
+        <table class="cmds">
+          <tr><td><code>hermes</code></td><td>Начать разговор в интерактивном CLI</td></tr>
+          <tr><td><code>hermes setup</code></td><td>Мастер настройки: модель, инструменты, мессенджеры</td></tr>
+          <tr><td><code>hermes model</code></td><td>Выбрать провайдера и модель</td></tr>
+          <tr><td><code>hermes tools</code></td><td>Включить или отключить наборы инструментов</td></tr>
+          <tr><td><code>hermes gateway</code></td><td>Запустить шлюз для Telegram, Discord и других платформ</td></tr>
+          <tr><td><code>hermes cron</code></td><td>Управлять задачами по расписанию</td></tr>
+          <tr><td><code>hermes doctor</code></td><td>Найти и объяснить проблемы с установкой</td></tr>
+          <tr><td><code>hermes update</code></td><td>Обновиться до последней версии</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="wrap">
+      <div class="closing-card">
+        <div>
+          <h2>Установка занимает пару минут</h2>
+          <p>Открытый код под лицензией MIT. Работает на Linux, macOS, Windows и Android (Termux).</p>
+        </div>
+        <div class="btn-row">
+          <a class="btn" href="https://hermes-agent.nousresearch.com/docs/getting-started/quickstart">Начать</a>
+          <a class="btn ghost" href="https://github.com/NousResearch/hermes-agent">Исходный код</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>☤ Hermes Agent · MIT</span>
+    <a href="https://hermes-agent.nousresearch.com/docs/">Документация</a>
+    <a href="https://discord.gg/NousResearch">Discord</a>
+    <span>Создан <a href="https://nousresearch.com">Nous Research</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var tabs = document.querySelectorAll('.tab');
+  var text = document.getElementById('cmd-text');
+  var prompt = document.getElementById('cmd-prompt');
+  var btn = document.getElementById('copy-btn');
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
+      text.textContent = tab.dataset.cmd;
+      prompt.textContent = tab.dataset.prompt;
+      btn.textContent = 'Копировать';
+    });
+  });
+
+  function selectText() {
+    var range = document.createRange();
+    range.selectNodeContents(text);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  btn.addEventListener('click', function () {
+    var value = text.textContent;
+    var done = function () { btn.textContent = 'Скопировано'; };
+    var fallback = function () { selectText(); btn.textContent = 'Выделено, нажмите Ctrl+C'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
+})();
+</script>
+</body>
+</html>
